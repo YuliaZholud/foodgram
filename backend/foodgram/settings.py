@@ -152,7 +152,7 @@ DJOSER = {
 
 # === Пользовательская модель ===
 
-AUTH_USER_MODEL = 'users.User'  # ← было 'user.User'
+AUTH_USER_MODEL = 'users.User'
 
 # === Статика и медиа ===
 

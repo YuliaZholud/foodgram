@@ -7,5 +7,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# gunicorn слушает 8000 — под это мы уже настроили nginx
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "foodgram_backend.wsgi"]
+# gunicorn слушает 8000 — под это уже настроен nginx
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "foodgram.wsgi:application"]
