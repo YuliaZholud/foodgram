@@ -7,29 +7,36 @@ volumes:
 
 services:
   db:
-    image: postgres:13
+    image: postgres:13.10
     env_file: .env
+    restart: always
     volumes:
       - pg_data:/var/lib/postgresql/data
 
   backend:
+    build: ./backend
     image: zholud229/foodgram_backend
+    restart: always
     env_file: .env
     depends_on:
       - db
     volumes:
-      - static:/backend_static
+      - static:/app/collected_static
       - media:/app/media
 
   frontend:
+    build: ./frontend
     image: zholud229/foodgram_frontend
+    restart: always
     env_file: .env
     command: cp -r /app/build/. /static/
     volumes:
       - static:/static
 
   gateway:
+    build: ./nginx
     image: zholud229/foodgram_gateway
+    restart: always
     env_file: .env
     depends_on:
       - backend

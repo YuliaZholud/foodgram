@@ -1,3 +1,5 @@
+"""Настройки Django-проекта Foodgram."""
+
 import os
 from pathlib import Path
 
@@ -5,7 +7,6 @@ from django.core.management.utils import get_random_secret_key
 from dotenv import load_dotenv
 from recipes.constants import PAGE_SIZE
 
-# Подгрузка .env
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -43,13 +44,11 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-
     'rest_framework',
     'rest_framework.authtoken',
     'django_filters',
     'djoser',
-
-    'users.apps.UsersConfig',
+    'users.apps.UsersConfig',  # ← было user.apps.UserConfig
     'recipes.apps.RecipesConfig',
     'api.apps.ApiConfig',
 ]
@@ -85,50 +84,38 @@ TEMPLATES = [
 WSGI_APPLICATION = 'foodgram.wsgi.application'
 
 # === База данных ===
-# Локально можешь использовать SQLite, на сервере - PostgreSQL через переменные окружения
 
-if DEBUG:
-    # Локальная разработка - простая SQLite
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
-        }
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.getenv('POSTGRES_DB', 'django'),
+        'USER': os.getenv('POSTGRES_USER', 'django'),
+        'PASSWORD': os.getenv('POSTGRES_PASSWORD', ''),
+        'HOST': os.getenv('DB_HOST', 'db'),
+        'PORT': os.getenv('DB_PORT', 5432),
     }
-else:
-    # Продакшен / сервер - PostgreSQL из переменных окружения
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': os.getenv('POSTGRES_DB', 'django'),
-            'USER': os.getenv('POSTGRES_USER', 'django'),
-            'PASSWORD': os.getenv('POSTGRES_PASSWORD', ''),
-            'HOST': os.getenv('DB_HOST', 'db'),
-            'PORT': os.getenv('DB_PORT', 5432),
-        }
-    }
+}
 
 # === Валидация паролей ===
 
 AUTH_PASSWORD_VALIDATORS = [
     {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',  # noqa: E501
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',  # noqa: E501
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',  # noqa: E501
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',  # noqa: E501
     },
 ]
 
 # === Локаль и время ===
 
 LANGUAGE_CODE = 'ru-ru'
-
 TIME_ZONE = 'UTC'
 
 USE_I18N = True
@@ -143,15 +130,18 @@ REST_FRAMEWORK = {
     'DEFAULT_FILTER_BACKENDS': [
         'django_filters.rest_framework.DjangoFilterBackend',
     ],
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'DEFAULT_PAGINATION_CLASS': (
+        'rest_framework.pagination.PageNumberPagination'
+    ),  # noqa: E501
     'PAGE_SIZE': PAGE_SIZE,
 }
 
 DJOSER = {
     'LOGIN_FIELD': 'email',
     'SERIALIZERS': {
-        'user': 'api.serializers.UserSerializer',
-        'current_user': 'api.serializers.UserSerializer',
+        'user_create': 'api.serializers.UserPostSerializer',
+        'user': 'api.serializers.UserGetSerializer',
+        'current_user': 'api.serializers.UserGetSerializer',
     },
     'HIDE_USERS': False,
     'PERMISSIONS': {
@@ -160,19 +150,17 @@ DJOSER = {
     },
 }
 
+# === Пользовательская модель ===
+
+AUTH_USER_MODEL = 'users.User'  # ← было 'user.User'
+
 # === Статика и медиа ===
 
 STATIC_URL = '/static/'
-STATIC_ROOT = os.getenv(
-    'STATIC_ROOT',
-    BASE_DIR / 'collected_static',
-)
+STATIC_ROOT = '/backend_static'
 
 MEDIA_URL = '/media/'
-MEDIA_ROOT = os.getenv(
-    'MEDIA_ROOT',
-    os.path.join(BASE_DIR, 'media'),
-)
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 # Путь к ингредиентам
 
