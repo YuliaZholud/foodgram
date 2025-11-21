@@ -10,13 +10,26 @@ class RecipeFilter(FilterSet):
 
     is_favorited = filters.BooleanFilter(method='filter_is_favorited')
     is_in_shopping_cart = filters.BooleanFilter(
-        method='filter_is_in_shopping_cart',
+        method='filter_is_in_shopping_cart'
     )
-    tags = filters.ModelMultipleChoiceFilter(
-        queryset=Tag.objects.all(),
-        field_name='tags__slug',
-        to_field_name='slug',
-    )
+
+    def filter_is_favorited(self, queryset, name, value):
+        user = self.request.user
+        if not value:
+            return queryset
+        if not user.is_authenticated:
+            return queryset.none()
+        # ВАЖНО: используем правильный related_name
+        return queryset.filter(favorites__user=user)
+
+    def filter_is_in_shopping_cart(self, queryset, name, value):
+        user = self.request.user
+        if not value:
+            return queryset
+        if not user.is_authenticated:
+            return queryset.none()
+        # здесь, судя по ошибке, related_name уже правильный
+        return queryset.filter(cart_recipes__user=user)
 
     class Meta:
         """Настройки фильтра для рецептов."""

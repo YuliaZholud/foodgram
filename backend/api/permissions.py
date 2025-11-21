@@ -13,7 +13,6 @@ class OwnerOrReadOnly(permissions.BasePermission):
 
     def has_object_permission(self, request, view, obj):
         """Проверить права доступа к объекту."""
-        return (
-                request.method in permissions.SAFE_METHODS
-                or getattr(obj, 'author', None) == request.user
-        )
+        is_safe_method = request.method in permissions.SAFE_METHODS
+        is_author = getattr(obj, 'author', None) == request.user
+        return is_safe_method or is_author
