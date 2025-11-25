@@ -11,6 +11,8 @@ load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+USE_SQLITE = os.getenv('USE_SQLITE', '0') == '1'
+
 # === Безопасность и отладка ===
 
 SECRET_KEY = os.getenv('SECRET_KEY', get_random_secret_key())
@@ -18,15 +20,17 @@ SECRET_KEY = os.getenv('SECRET_KEY', get_random_secret_key())
 DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 
 raw_allowed_hosts = os.getenv('ALLOWED_HOSTS')
-if raw_allowed_hosts:
-    ALLOWED_HOSTS = [h.strip() for h in raw_allowed_hosts.split(',')]
-else:
-    ALLOWED_HOSTS = [
+
+ALLOWED_HOSTS = (
+    [host.strip() for host in raw_allowed_hosts.split(',')]
+    if raw_allowed_hosts
+    else [
         'localhost',
         '127.0.0.1',
         '89.169.186.95',
         'foodgram-yulia.duckdns.org',
     ]
+)
 
 CSRF_TRUSTED_ORIGINS = [
     'http://89.169.186.95',
@@ -85,16 +89,26 @@ WSGI_APPLICATION = 'foodgram.wsgi.application'
 
 # === База данных ===
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.getenv('POSTGRES_DB', 'django'),
-        'USER': os.getenv('POSTGRES_USER', 'django'),
-        'PASSWORD': os.getenv('POSTGRES_PASSWORD', ''),
-        'HOST': os.getenv('DB_HOST', 'db'),
-        'PORT': os.getenv('DB_PORT', 5432),
+if USE_SQLITE:
+    # Локальная база для разработки (на твоём компьютере)
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
     }
-}
+else:
+    # Postgres для Docker/сервера (как требует Практикум)
+    DATABASES = {
+        'default': {
+            'ENGINE': os.getenv('DB_ENGINE', 'django.db.backends.postgresql'),
+            'NAME': os.getenv('DB_NAME', 'postgres'),
+            'USER': os.getenv('POSTGRES_USER', 'postgres'),
+            'PASSWORD': os.getenv('POSTGRES_PASSWORD', 'postgres'),
+            'HOST': os.getenv('DB_HOST', 'db'),
+            'PORT': os.getenv('DB_PORT', '5432'),
+        }
+    }
 
 # === Валидация паролей ===
 
@@ -148,6 +162,7 @@ DJOSER = {
         'user_list': ('rest_framework.permissions.AllowAny',),
         'user': ('rest_framework.permissions.IsAuthenticatedOrReadOnly',),
     },
+    'TOKEN_MODEL': 'rest_framework.authtoken.models.Token',
 }
 
 # === Пользовательская модель ===

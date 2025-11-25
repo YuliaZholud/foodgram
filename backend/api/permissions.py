@@ -1,14 +1,15 @@
-"""Пользовательские разрешения для API."""
+"""Пользовательские классы разрешений для API."""
 
 from rest_framework import permissions
+from rest_framework.permissions import IsAuthenticatedOrReadOnly
 
 
-class OwnerOrReadOnly(permissions.BasePermission):
+class IsAuthenticatedAuthorOrReadOnly(IsAuthenticatedOrReadOnly):
     """
     Разрешение для объектов.
 
-    Изменять объект может только его автор, остальные имеют доступ
-    только на чтение.
+    - безопасные методы (GET, HEAD, OPTIONS) доступны всем;
+    - небезопасные методы доступны только аутентифицированному автору объекта.
     """
 
     def has_object_permission(self, request, view, obj):

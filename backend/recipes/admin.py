@@ -61,9 +61,8 @@ class TagAdmin(admin.ModelAdmin):
     search_fields = ('name', 'slug')
 
 
-@admin.register(Favorite)
-class FavoriteAdmin(admin.ModelAdmin):
-    """Админка избранного."""
+class UserRecipeBaseAdmin(admin.ModelAdmin):
+    """Базовый админ-класс для связок пользователь–рецепт."""
 
     list_display = ('id', 'user', 'recipe')
     search_fields = (
@@ -71,18 +70,16 @@ class FavoriteAdmin(admin.ModelAdmin):
         'user__email',
         'recipe__name',
     )
+
+
+@admin.register(Favorite)
+class FavoriteAdmin(UserRecipeBaseAdmin):
+    """Админка избранного."""
 
 
 @admin.register(ShoppingCart)
-class ShoppingCartAdmin(admin.ModelAdmin):
+class ShoppingCartAdmin(UserRecipeBaseAdmin):
     """Админка списка покупок."""
-
-    list_display = ('id', 'user', 'recipe')
-    search_fields = (
-        'user__username',
-        'user__email',
-        'recipe__name',
-    )
 
 
 @admin.register(RecipeIngredient)

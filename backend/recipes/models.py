@@ -96,7 +96,15 @@ class Recipe(models.Model):
     )
     cooking_time = models.PositiveSmallIntegerField(
         verbose_name='Время готовки (мин)',
-        validators=(MinValueValidator(MIN_COOKING_TIME),),
+        validators=(
+            MinValueValidator(
+                MIN_COOKING_TIME,
+                message=(
+                    f'Время готовки не может быть меньше '
+                    f'{MIN_COOKING_TIME} мин.'
+                ),
+            ),
+        ),
     )
     pub_date = models.DateTimeField(
         verbose_name='Дата добавления',
@@ -116,9 +124,7 @@ class Recipe(models.Model):
     short_link = models.CharField(
         verbose_name='Короткая ссылка',
         max_length=SHORT_LINK_MAX_LENGTH,
-        unique=True,
         blank=True,
-        null=True,
     )
 
     class Meta:
@@ -128,6 +134,13 @@ class Recipe(models.Model):
         verbose_name = 'Рецепт'
         verbose_name_plural = 'Рецепты'
         ordering = ('-pub_date',)
+        constraints = [
+            models.UniqueConstraint(
+                fields=('short_link',),
+                condition=~models.Q(short_link=''),
+                name='unique_non_empty_short_link',
+            ),
+        ]
 
     def __str__(self):
         """Строковое представление объекта."""

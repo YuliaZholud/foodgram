@@ -1,4 +1,4 @@
-"""Вспомогательные классы для приложения api."""
+"""Сервисные классы для приложения api."""
 
 import base64
 import random
@@ -15,16 +15,22 @@ class Base64ImageField(serializers.ImageField):
 
     def __init__(self, *args, **kwargs):
         """Инициализировать поле с поддержкой префикса имени файла."""
-        self.file_prefix = kwargs.pop('file_prefix', 'file')
+        file_prefix = kwargs.pop('file_prefix', 'file')
         super().__init__(*args, **kwargs)
+        self.file_prefix = file_prefix
 
     def to_internal_value(self, data):
         """Преобразовать Base64-строку в объект загружаемого файла."""
-        if isinstance(data, str) and data.startswith('data:image'):
-            fmt, img_str = data.split(';base64,')
-            ext = fmt.split('/')[-1]
-            filename = f'{self.file_prefix}_{uuid.uuid4()}.{ext}'
-            data = ContentFile(base64.b64decode(img_str), name=filename)
+        if not (isinstance(data, str) and data.startswith('data:image')):
+            return super().to_internal_value(data)
+
+        fmt, img_str = data.split(';base64,')
+        ext = fmt.split('/')[-1]
+
+        unique_id = uuid.uuid4()
+        filename = f'{self.file_prefix}_{unique_id}.{ext}'
+
+        data = ContentFile(base64.b64decode(img_str), name=filename)
         return super().to_internal_value(data)
 
 
