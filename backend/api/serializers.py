@@ -286,6 +286,14 @@ class RecipeGetSerializer(serializers.ModelSerializer):
             user_id=user.pk,
         ).exists()
 
+    def get_is_favorited(self, obj):
+        """Проверить, есть ли рецепт в избранном у текущего пользователя."""
+        return self._check_user_status(obj, Favorite)
+
+    def get_is_in_shopping_cart(self, obj):
+        """Возвращает True, если рецепт в списке покупок."""
+        return self._check_user_status(obj, ShoppingCart)
+
 
 class MiniRecipeSerializer(serializers.ModelSerializer):
     """Короткая версия рецепта для списков."""

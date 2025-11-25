@@ -228,10 +228,13 @@ class UserViewSet(DjoserUserViewSet):
     pagination_class = Pagination
 
     def get_serializer_class(self):
-        """Вернуть сериализатор в зависимости от выполняемого действия."""
+        """
+        Использовать наши сериализаторы для списка/деталей,
+        а для остальных действий - логику Djoser.
+        """
         if self.action in {'list', 'retrieve', 'me'}:
             return UserGetSerializer
-        return UserPostSerializer
+        return super().get_serializer_class()
 
     @action(
         url_path='me',
@@ -287,7 +290,7 @@ class UserViewSet(DjoserUserViewSet):
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-        deleted, _ = author.following.filter(user=user).delete()
+        deleted, _ = author.followers.filter(user=user).delete()
         if deleted == 0:
             return Response(
                 {'error': 'Подписки не существует'},
@@ -304,7 +307,7 @@ class UserViewSet(DjoserUserViewSet):
         """Список авторов, на которых подписан пользователь."""
         user = self.request.user
         authors = User.objects.filter(
-            following__user=user,
+            followers__user=user,
         ).distinct()
         page = self.paginate_queryset(authors)
         context = self.get_serializer_context()

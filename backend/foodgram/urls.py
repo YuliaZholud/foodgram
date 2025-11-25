@@ -12,7 +12,7 @@ urlpatterns = [
     path(
         's/<slug:short_link_code>/',
         redirect_to_recipe_detail,
-        name='short_link_redirect',
+        name='short_link',
     ),
 ]
 
