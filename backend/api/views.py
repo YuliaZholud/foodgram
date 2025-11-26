@@ -40,7 +40,6 @@ from rest_framework.permissions import (
     IsAuthenticated,
 )
 from rest_framework.response import Response
-from users.models import Follow
 
 User = get_user_model()
 
@@ -202,7 +201,8 @@ class RecipeViewSet(viewsets.ModelViewSet):
                 total_amount = item['total_amount']
             except KeyError as error:
                 raise ValidationError(
-                    f'Ошибка формирования списка покупок: отсутствует поле {error}'
+                    'Ошибка формирования списка покупок: '
+                    f'отсутствует поле {error}'
                 ) from error
 
             lines.append(
@@ -228,9 +228,10 @@ class UserViewSet(DjoserUserViewSet):
     pagination_class = Pagination
 
     def get_serializer_class(self):
-        """
+        """Возвращает корректный сериализатор.
+
         Использовать наши сериализаторы для списка/деталей,
-        а для остальных действий - логику Djoser.
+        а для остальных действий — логику Djoser.
         """
         if self.action in {'list', 'retrieve', 'me'}:
             return UserGetSerializer
@@ -277,7 +278,10 @@ class UserViewSet(DjoserUserViewSet):
         detail=True,
     )
     def subscribe(self, request, id=None):
-        """Подписаться на автора или отписаться от него."""
+        """Подписаться на автора или отписаться от него.
+
+        Работает с POST и DELETE для изменения подписки.
+        """
         user = request.user
         author = get_object_or_404(User, pk=id)
 
