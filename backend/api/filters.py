@@ -3,7 +3,7 @@
 from django_filters import rest_framework as filters
 from django_filters.rest_framework import FilterSet
 
-from recipes.models import Ingredient, Recipe, Favorite, ShoppingCart
+from recipes.models import Ingredient, Recipe
 
 
 class RecipeFilter(filters.FilterSet):
@@ -17,10 +17,13 @@ class RecipeFilter(filters.FilterSet):
     )
 
     class Meta:
+        """Параметры фильтрации рецептов."""
+
         model = Recipe
         fields = ('author', 'tags', 'is_favorited', 'is_in_shopping_cart')
 
     def filter_is_favorited(self, queryset, name, value):
+        """Вернуть рецепты, добавленные в избранное указанным пользователем."""
         if not value:
             return queryset
         user = getattr(self.request, 'user', None)
@@ -29,6 +32,7 @@ class RecipeFilter(filters.FilterSet):
         return queryset.filter(favorites__user=user)
 
     def filter_is_in_shopping_cart(self, queryset, name, value):
+        """Вернуть рецепты, находящиеся в списке покупок пользователя."""
         if not value:
             return queryset
         user = getattr(self.request, 'user', None)
