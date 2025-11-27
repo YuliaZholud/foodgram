@@ -72,17 +72,15 @@ class UserGetSerializer(serializers.ModelSerializer):
         )
 
     def get_is_subscribed(self, author):
-        """Проверка подписки пользователей."""
+        """Проверить, подписан ли текущий пользователь на автора."""
         request = self.context.get('request')
         if request is None:
             return False
 
-        user = request.user  # может быть и AnonymousUser
-
-        return (
-                user.is_authenticated
-                and user.follows.filter(author=author).exists()
-        )
+        user = request.user
+        # Для анонимного пользователя user.pk == None,
+        # фильтр по внешнему ключу ничего не вернёт результат будет False.
+        return author.followers.filter(user_id=user.pk).exists()
 
 
 class TagSerializer(serializers.ModelSerializer):
@@ -368,56 +366,47 @@ class ShoppingCartSerializer(FavoriteSerializer):
 
 
 class SubscriptionPostSerializer(serializers.ModelSerializer):
-    """Сериализатор создания подписки."""
+    """Сериализатор для создания и удаления подписки."""
 
     class Meta:
-        """Настройки сериализатора создания подписки."""
-
         model = Follow
-        # Тело запроса у /api/users/{id}/subscribe/ пустое, поэтому полей нет
+        # На вход никаких полей не ожидаем — маршрут не принимает body.
         fields = ()
 
     def validate(self, attrs):
-        """Проверить корректность подписки при создании."""
+        """Проверка возможности подписки."""
         request = self.context.get('request')
-        user = getattr(request, 'user', None)
         author = self.context.get('author')
 
-        if user is None or not user.is_authenticated:
-            raise serializers.ValidationError('Необходима аутентификация.')
-
-        if author is None:
-            raise serializers.ValidationError(
-                'Не удалось определить пользователя для подписки.'
+        if request is None or author is None:
+            raise ValidationError(
+                'Отсутствуют данные контекста для проверки подписки.'
             )
+
+        user = request.user
 
         if user == author:
-            raise serializers.ValidationError(
-                'Нельзя подписаться на себя.'
-            )
+            raise ValidationError('Нельзя подписаться на самого себя.')
 
-        if Follow.objects.filter(
-                user_id=user.pk,
-                author_id=author.pk,
-        ).exists():
-            raise serializers.ValidationError(
-                'Вы уже подписаны на этого пользователя.'
-            )
+        if author.followers.filter(user=user).exists():
+            raise ValidationError('Подписка уже существует.')
 
+        # Прокинем автора дальше в create через validated_data.
+        attrs['author'] = author
         return attrs
 
     def create(self, validated_data):
-        """Создать подписку для текущего пользователя."""
-        request = self.context.get('request')
+        """Создание подписки."""
+        request = self.context['request']
         user = request.user
-        author = self.context['author']
+        author = validated_data['author']
         return Follow.objects.create(user=user, author=author)
 
     @classmethod
-    def validate_delete(cls, user, author):
+    def validate_delete(cls, *, user, author):
         """Проверка перед удалением подписки."""
-        if not Follow.objects.filter(user=user, author=author).exists():
-            raise serializers.ValidationError('Подписки не существует')
+        if not author.followers.filter(user=user).exists():
+            raise ValidationError('Подписки не существует')
 
 
 class SubscriptionGetSerializer(serializers.ModelSerializer):

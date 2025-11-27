@@ -238,21 +238,6 @@ class UserViewSet(DjoserUserViewSet):
         permission_classes=(IsAuthenticated,),
         detail=False,
     )
-    def user_avatar(self, request):
-        """Обновить или удалить аватар текущего пользователя."""
-        user = request.user
-        if request.method == 'PUT':
-            serializer = AvatarSerializer(
-                user,
-                data=request.data,
-                context={'request': request},
-            )
-            serializer.is_valid(raise_exception=True)
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        user.avatar.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
-
     @action(
         methods=('POST', 'DELETE'),
         url_path='subscribe',
@@ -265,29 +250,20 @@ class UserViewSet(DjoserUserViewSet):
         Работает с POST и DELETE для изменения подписки.
         """
         user = request.user
-        author = get_object_or_404(User, pk=id)
+        # Используем стандартный механизм DRF для получения объекта.
+        author = self.get_object()
 
         if request.method == 'POST':
             serializer = SubscriptionPostSerializer(
                 data={},
-                context={
-                    'request': request,
-                    'author': author,
-                },
+                context={'request': request, 'author': author},
             )
             serializer.is_valid(raise_exception=True)
             serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-            response_serializer = SubscriptionSerializer(
-                author,
-                context=self.get_serializer_context(),
-            )
-            return Response(
-                response_serializer.data,
-                status=status.HTTP_201_CREATED,
-            )
-
-        SubscriptionPostSerializer.validate_delete(user, author)
+        # DELETE
+        SubscriptionPostSerializer.validate_delete(user=user, author=author)
         author.followers.filter(user=user).delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 

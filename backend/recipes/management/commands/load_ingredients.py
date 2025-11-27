@@ -1,5 +1,3 @@
-"""Команда для загрузки ингредиентов из JSON-файла в базу данных."""
-
 import json
 import os
 
@@ -9,12 +7,9 @@ from recipes.models import Ingredient
 
 
 class Command(BaseCommand):
-    """Команда Django для импорта ингредиентов."""
-
     help = 'Загрузка ингредиентов из data/ingredients.json'
 
     def handle(self, *args, **options):
-        """Загрузить ингредиенты из файла data/ingredients.json."""
         file_path = os.path.join(
             settings.BASE_DIR.parent,
             'data',
@@ -31,9 +26,12 @@ class Command(BaseCommand):
             data = json.load(ingredients_file)
 
         created = 0
+
         for item in data:
             name = item.get('name')
             measurement_unit = item.get('measurement_unit')
+
+            # Пропускаем записи без имени или единицы измерения
             if not name or not measurement_unit:
                 continue
 
