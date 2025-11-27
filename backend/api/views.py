@@ -47,7 +47,9 @@ User = get_user_model()
 class RecipeViewSet(viewsets.ModelViewSet):
     """Вьюсет рецепта и всего, что с ним связано."""
 
-    queryset = Recipe.objects.all()
+    lookup_field = 'pk'
+    lookup_url_kwarg = 'pk'
+
     serializer_class = RecipePostSerializer
     pagination_class = Pagination
     permission_classes = (IsAuthenticatedAuthorOrReadOnly,)
@@ -91,7 +93,7 @@ class RecipeViewSet(viewsets.ModelViewSet):
     )
     def get_short_link(self, request, pk=None):
         """Получить или сгенерировать короткую ссылку на рецепт."""
-        recipe = get_object_or_404(Recipe, id=pk)
+        recipe = self.get_object()  # автоматическая проверка прав и 404
 
         if recipe.short_link:
             short_url = request.build_absolute_uri(
@@ -100,14 +102,12 @@ class RecipeViewSet(viewsets.ModelViewSet):
             return Response({'short-link': short_url})
 
         while True:
-            short_code = ShortLink().create_short_link(
-                SHORT_LINK_MAX_POSTFIX,
-            )
+            short_code = ShortLink().create_short_link(SHORT_LINK_MAX_POSTFIX)
             if not Recipe.objects.filter(short_link=short_code).exists():
                 break
 
         recipe.short_link = short_code
-        recipe.save(update_fields=['short_link'])
+        recipe.save(update_fields=('short_link',))  # tuple вместо списка
 
         short_url = request.build_absolute_uri(
             reverse('short_link', args=(short_code,)),
@@ -126,7 +126,6 @@ class RecipeViewSet(viewsets.ModelViewSet):
             request=request,
             model=Favorite,
             serializer_class=FavoriteSerializer,
-            not_found_message='Рецепт не найден в избранном',
         )
 
     @action(
@@ -141,37 +140,23 @@ class RecipeViewSet(viewsets.ModelViewSet):
             request=request,
             model=ShoppingCart,
             serializer_class=ShoppingCartSerializer,
-            not_found_message='Рецепт не найден в списке покупок',
         )
 
-    def _add_or_remove_recipe(
-            self,
-            request,
-            model,
-            serializer_class,
-            not_found_message,
-    ):
-        """
-        Общий обработчик добавления и удаления рецепта.
-
-        Работает как для избранного, так и для списка покупок.
-        """
+    def _add_or_remove_recipe(self, request, model, serializer_class):
+        """Общий обработчик добавления и удаления рецепта."""
         recipe = self.get_object()
 
         if request.method == 'POST':
             serializer = serializer_class(
-                data={'recipe': recipe.id, 'user': request.user.id},
+                data={'recipe': recipe.pk},
                 context={'request': request},
             )
             serializer.is_valid(raise_exception=True)
-            serializer.save()
+            serializer.save(user=request.user, recipe=recipe)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-        qs = model.objects.filter(user=request.user, recipe=recipe)
-        if not qs.exists():
-            raise ValidationError(not_found_message)
-
-        qs.delete()
+        serializer_class.validate_delete(request.user, recipe)
+        model.objects.filter(user=request.user, recipe=recipe).delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(
@@ -201,13 +186,10 @@ class RecipeViewSet(viewsets.ModelViewSet):
                 total_amount = item['total_amount']
             except KeyError as error:
                 raise ValidationError(
-                    'Ошибка формирования списка покупок: '
-                    f'отсутствует поле {error}'
+                    f'Ошибка формирования списка покупок: отсутствует поле {error}'
                 ) from error
 
-            lines.append(
-                f'{name} ({measurement_unit}) — {total_amount}',
-            )
+            lines.append(f'{name} ({measurement_unit}) — {total_amount}')
 
         content = '\n'.join(lines)
         response = HttpResponse(
@@ -287,42 +269,27 @@ class UserViewSet(DjoserUserViewSet):
 
         if request.method == 'POST':
             serializer = SubscriptionPostSerializer(
-                data={'author': author.id},
-                context={'request': request},
+                data={},
+                context={
+                    'request': request,
+                    'author': author,
+                },
             )
             serializer.is_valid(raise_exception=True)
             serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-        deleted, _ = author.followers.filter(user=user).delete()
-        if deleted == 0:
-            return Response(
-                {'error': 'Подписки не существует'},
-                status=status.HTTP_400_BAD_REQUEST,
+            response_serializer = SubscriptionSerializer(
+                author,
+                context=self.get_serializer_context(),
             )
-        return Response(status=status.HTTP_204_NO_CONTENT)
+            return Response(
+                response_serializer.data,
+                status=status.HTTP_201_CREATED,
+            )
 
-    @action(
-        url_path='subscriptions',
-        permission_classes=(IsAuthenticated,),
-        detail=False,
-    )
-    def subscriptions(self, request):
-        """Список авторов, на которых подписан пользователь."""
-        user = self.request.user
-        authors = User.objects.filter(
-            followers__user=user,
-        ).distinct()
-        page = self.paginate_queryset(authors)
-        context = self.get_serializer_context()
-        serializer = SubscriptionSerializer(
-            page if page is not None else authors,
-            many=True,
-            context=context,
-        )
-        if page is not None:
-            return self.get_paginated_response(serializer.data)
-        return Response(serializer.data)
+        SubscriptionPostSerializer.validate_delete(user, author)
+        author.followers.filter(user=user).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class TagViewSet(viewsets.ReadOnlyModelViewSet):

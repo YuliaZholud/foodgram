@@ -124,7 +124,6 @@ class Recipe(models.Model):
     short_link = models.CharField(
         verbose_name='Короткая ссылка',
         max_length=SHORT_LINK_MAX_LENGTH,
-        blank=True,
     )
 
     class Meta:

@@ -49,8 +49,10 @@ class IngredientAdmin(admin.ModelAdmin):
     """Админка ингредиентов."""
 
     list_display = ('id', 'name', 'measurement_unit')
-    search_fields = ('name',)
-    list_filter = ('name',)
+    # поиск по тем же полям, что и выводим/фильтруем
+    search_fields = ('name', 'measurement_unit')
+    # фильтр по тем же полям
+    list_filter = ('name', 'measurement_unit')
 
 
 @admin.register(Tag)

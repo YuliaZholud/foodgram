@@ -11,7 +11,7 @@ from recipes.models import (
     Tag,
 )
 from rest_framework import serializers
-from users.models import Follow
+from users.models import User, Follow
 
 User = get_user_model()
 
@@ -72,16 +72,17 @@ class UserGetSerializer(serializers.ModelSerializer):
         )
 
     def get_is_subscribed(self, author):
-        """Проверить, подписан ли текущий пользователь на автора."""
+        """Проверка подписки пользователей."""
         request = self.context.get('request')
         if request is None:
             return False
 
         user = request.user  # может быть и AnonymousUser
-        return Follow.objects.filter(
-            user_id=user.pk,
-            author_id=author.pk,
-        ).exists()
+
+        return (
+                user.is_authenticated
+                and user.follows.filter(author=author).exists()
+        )
 
 
 class TagSerializer(serializers.ModelSerializer):
@@ -219,22 +220,32 @@ class RecipePostSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         """Создать рецепт и связанные теги и ингредиенты."""
-        tags = validated_data.pop('tags')
-        ingredients = validated_data.pop('recipe_ingredients')
+        # Берём данные, не мутируя исходный словарь
+        tags = validated_data.get('tags')
+        ingredients = validated_data.get('recipe_ingredients')
 
+        # Работаем с копией
+        data = validated_data.copy()
+        data.pop('tags', None)
+        data.pop('recipe_ingredients', None)
         # author в запросе игнорируем, всегда берём из контекста
-        validated_data['author'] = self.context['request'].user
+        data['author'] = self.context['request'].user
 
-        recipe = super().create(validated_data)
+        recipe = super().create(data)
         self._update_tags_and_ingredients(recipe, tags, ingredients)
         return recipe
 
     def update(self, instance, validated_data):
         """Обновить рецепт и связанные теги и ингредиенты."""
-        tags = validated_data.pop('tags')
-        ingredients = validated_data.pop('recipe_ingredients')
+        tags = validated_data.get('tags')
+        ingredients = validated_data.get('recipe_ingredients')
+
+        data = validated_data.copy()
+        data.pop('tags', None)
+        data.pop('recipe_ingredients', None)
+
         self._update_tags_and_ingredients(instance, tags, ingredients)
-        return super().update(instance, validated_data)
+        return super().update(instance, data)
 
     def to_representation(self, instance):
         """Вернуть представление рецепта через сериализатор чтения."""
@@ -316,6 +327,7 @@ class FavoriteSerializer(serializers.ModelSerializer):
     """Сериализатор добавления и удаления рецепта из избранного."""
 
     error_message = 'Рецепт уже добавлен в избранное.'
+    not_found_message = 'Рецепт не найден в избранном.'
 
     class Meta:
         """Настройки сериализатора избранных рецептов."""
@@ -329,6 +341,12 @@ class FavoriteSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(self.error_message)
         return data
 
+    @classmethod
+    def validate_delete(cls, user, recipe):
+        """Проверка перед удалением рецепта из избранного."""
+        if not cls.Meta.model.objects.filter(user=user, recipe=recipe).exists():
+            raise serializers.ValidationError(cls.not_found_message)
+
     def to_representation(self, instance):
         """Вернуть краткое представление рецепта."""
         return MiniRecipeSerializer(
@@ -341,6 +359,7 @@ class ShoppingCartSerializer(FavoriteSerializer):
     """Сериализатор добавления и удаления рецепта из списка покупок."""
 
     error_message = 'Рецепт уже добавлен в список покупок.'
+    not_found_message = 'Рецепт не найден в списке покупок.'
 
     class Meta(FavoriteSerializer.Meta):
         """Настройки сериализатора списка покупок."""
@@ -355,18 +374,21 @@ class SubscriptionPostSerializer(serializers.ModelSerializer):
         """Настройки сериализатора создания подписки."""
 
         model = Follow
-        fields = ('user', 'author')
-        read_only_fields = ('user',)
+        # Тело запроса у /api/users/{id}/subscribe/ пустое, поэтому полей нет
+        fields = ()
 
     def validate(self, attrs):
         """Проверить корректность подписки при создании."""
         request = self.context.get('request')
         user = getattr(request, 'user', None)
-        author = attrs.get('author')
+        author = self.context.get('author')
 
         if user is None or not user.is_authenticated:
+            raise serializers.ValidationError('Необходима аутентификация.')
+
+        if author is None:
             raise serializers.ValidationError(
-                'Необходима аутентификация.'
+                'Не удалось определить пользователя для подписки.'
             )
 
         if user == author:
@@ -387,8 +409,15 @@ class SubscriptionPostSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         """Создать подписку для текущего пользователя."""
         request = self.context.get('request')
-        user = getattr(request, 'user', None)
-        return Follow.objects.create(user=user, **validated_data)
+        user = request.user
+        author = self.context['author']
+        return Follow.objects.create(user=user, author=author)
+
+    @classmethod
+    def validate_delete(cls, user, author):
+        """Проверка перед удалением подписки."""
+        if not Follow.objects.filter(user=user, author=author).exists():
+            raise serializers.ValidationError('Подписки не существует')
 
 
 class SubscriptionGetSerializer(serializers.ModelSerializer):
