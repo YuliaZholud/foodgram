@@ -11,7 +11,7 @@ from recipes.models import (
     Tag,
 )
 from rest_framework import serializers
-from users.models import User, Follow
+from users.models import Follow
 
 User = get_user_model()
 
@@ -342,7 +342,10 @@ class FavoriteSerializer(serializers.ModelSerializer):
     @classmethod
     def validate_delete(cls, user, recipe):
         """Проверка перед удалением рецепта из избранного."""
-        if not cls.Meta.model.objects.filter(user=user, recipe=recipe).exists():
+        if not cls.Meta.model.objects.filter(
+                user=user,
+                recipe=recipe,
+        ).exists():
             raise serializers.ValidationError(cls.not_found_message)
 
     def to_representation(self, instance):
@@ -369,8 +372,10 @@ class SubscriptionPostSerializer(serializers.ModelSerializer):
     """Сериализатор для создания и удаления подписки."""
 
     class Meta:
+        """Настройки сериализатора подписки для записи."""
+
         model = Follow
-        # На вход никаких полей не ожидаем — маршрут не принимает body.
+        # На вход никаких полей не ожидаем - маршрут не принимает body.
         fields = ()
 
     def validate(self, attrs):
@@ -379,17 +384,19 @@ class SubscriptionPostSerializer(serializers.ModelSerializer):
         author = self.context.get('author')
 
         if request is None or author is None:
-            raise ValidationError(
+            raise serializers.ValidationError(
                 'Отсутствуют данные контекста для проверки подписки.'
             )
 
         user = request.user
 
         if user == author:
-            raise ValidationError('Нельзя подписаться на самого себя.')
+            raise serializers.ValidationError(
+                'Нельзя подписаться на самого себя.'
+            )
 
         if author.followers.filter(user=user).exists():
-            raise ValidationError('Подписка уже существует.')
+            raise serializers.ValidationError('Подписка уже существует.')
 
         # Прокинем автора дальше в create через validated_data.
         attrs['author'] = author
@@ -406,7 +413,7 @@ class SubscriptionPostSerializer(serializers.ModelSerializer):
     def validate_delete(cls, *, user, author):
         """Проверка перед удалением подписки."""
         if not author.followers.filter(user=user).exists():
-            raise ValidationError('Подписки не существует')
+            raise serializers.ValidationError('Подписки не существует')
 
 
 class SubscriptionGetSerializer(serializers.ModelSerializer):

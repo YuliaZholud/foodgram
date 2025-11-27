@@ -15,7 +15,8 @@ class Base64ImageField(serializers.ImageField):
 
     def __init__(self, *args, **kwargs):
         """Инициализировать поле с поддержкой префикса имени файла."""
-        file_prefix = kwargs.pop('file_prefix', 'file')  # убираем свой параметр
+        file_prefix = kwargs.pop('file_prefix', 'file')
+        # убираем свой параметр
         super().__init__(*args, **kwargs)  # вызываем родителя раньше
         self.file_prefix = file_prefix  # и только потом задаём свои поля
 

@@ -5,11 +5,9 @@ from api.permissions import IsAuthenticatedAuthorOrReadOnly
 from api.serializers import (
     FavoriteSerializer,
     ShoppingCartSerializer,
-    SubscriptionSerializer,
     TagSerializer,
     IngredientSerializer,
     RecipePostSerializer,
-    AvatarSerializer,
     UserGetSerializer,
     UserPostSerializer,
     SubscriptionPostSerializer,
@@ -186,7 +184,8 @@ class RecipeViewSet(viewsets.ModelViewSet):
                 total_amount = item['total_amount']
             except KeyError as error:
                 raise ValidationError(
-                    f'Ошибка формирования списка покупок: отсутствует поле {error}'
+                    'Ошибка формирования списка покупок: '
+                    f'отсутствует поле {error}'
                 ) from error
 
             lines.append(f'{name} ({measurement_unit}) — {total_amount}')
