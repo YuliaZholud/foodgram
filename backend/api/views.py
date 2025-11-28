@@ -30,7 +30,8 @@ from recipes.models import (
     ShoppingCart,
     Tag,
 )
-from rest_framework import status, viewsets
+
+from rest_framework import status, viewsets, permissions
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -183,38 +184,89 @@ class RecipeViewSet(viewsets.ModelViewSet):
 
 
 class UserViewSet(DjoserUserViewSet):
-    """Работа с пользователями."""
+    """Вьюсет пользователя (расширение Djosер)."""
 
     queryset = User.objects.all()
     serializer_class = UserPostSerializer
     pagination_class = Pagination
 
     def get_serializer_class(self):
-        """Выбрать сериализатор."""
+        """Вернуть корректный сериализатор для действия.
+
+        Для списка, деталей и /me используем свои сериализаторы,
+        для остальных действий — стандартную логику Djoser.
+        """
         if self.action in {'list', 'retrieve', 'me'}:
             return UserGetSerializer
         return super().get_serializer_class()
 
     @action(
-        methods=('GET',),
-        url_path='subscriptions',
-        permission_classes=(IsAuthenticated,),
         detail=False,
+        methods=['get', 'put', 'patch'],
+        permission_classes=[permissions.IsAuthenticated],
+        url_path='me',
+    )
+    def me(self, request, *args, **kwargs):
+        """Вернуть или обновить данные текущего пользователя."""
+        if request.method == 'GET':
+            return super().me(request, *args, **kwargs)
+
+        serializer = AvatarSerializer(
+            request.user,
+            data=request.data,
+            partial=True,
+            context={'request': request},
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(
+        methods=('POST', 'DELETE'),
+        detail=True,
+        permission_classes=(permissions.IsAuthenticated,),
+        url_path='subscribe',
+    )
+    def subscribe(self, request, id=None):
+        """Подписаться или отписаться от пользователя."""
+        author = self.get_object()
+
+        if request.method == 'POST':
+            # тело запроса пустое, всё берём из контекста
+            serializer = SubscriptionPostSerializer(
+                data={},
+                context={'request': request, 'author': author},
+            )
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+
+            output = SubscriptionSerializer(
+                author,
+                context={'request': request},
+            )
+            return Response(output.data, status=status.HTTP_201_CREATED)
+
+        # DELETE — валидация удаления в сериализаторе
+        SubscriptionPostSerializer.validate_delete(
+            user=request.user,
+            author=author,
+        )
+        author.followers.filter(user=request.user).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(
+        detail=False,
+        methods=['get'],
+        permission_classes=[permissions.IsAuthenticated],
+        url_path='subscriptions',
     )
     def subscriptions(self, request):
-        """Список авторов, на которых подписан текущий пользователь."""
+        """Вернуть список авторов, на которых подписан текущий пользователь."""
         user = request.user
-
-        # все объекты Follow текущего пользователя
-        follows = user.follower.select_related('author')
-
-        # достаём авторов из подписок
-        authors = [follow.author for follow in follows]
-
-        # пагинируем уже список авторов
-        page = self.paginate_queryset(authors)
+        authors = User.objects.filter(followers__user=user)
+        pages = self.paginate_queryset(authors)
         serializer = SubscriptionSerializer(
-            page,
+            pages,
             many=True,
             context={'request': request},
         )

@@ -433,15 +433,18 @@ class SubscriptionSerializer(UserGetSerializer):
         """Вернуть рецепты автора с учётом recipes_limit."""
         request = self.context.get('request')
         recipes_qs = obj.recipes.all().order_by('-id')
-        recipes_limit = None
 
-        if request:
+        recipes_limit = None
+        if request is not None:
             recipes_limit = request.query_params.get('recipes_limit')
 
-        if recipes_limit:
+        if recipes_limit is not None:
             try:
-                recipes_qs = recipes_qs[: int(recipes_limit)]
+                limit = int(recipes_limit)
+                if limit > 0:
+                    recipes_qs = recipes_qs[:limit]
             except (TypeError, ValueError):
+                # если в recipes_limit пришла ерунда — просто отдаём все рецепты
                 pass
 
         return MiniRecipeSerializer(
