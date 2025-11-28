@@ -325,6 +325,7 @@ class FavoriteSerializer(serializers.ModelSerializer):
     """Сериализатор добавления и удаления рецепта из избранного."""
 
     error_message = 'Рецепт уже добавлен в избранное.'
+    not_found_message = 'Рецепт не найден в избранном.'
 
     class Meta:
         """Настройки сериализатора избранных рецептов."""
@@ -332,12 +333,6 @@ class FavoriteSerializer(serializers.ModelSerializer):
         model = Favorite
         fields = ('user', 'recipe')
         read_only_fields = ('user',)
-
-    class Meta:
-        """Настройки сериализатора избранных рецептов."""
-
-        model = Favorite
-        fields = ('user', 'recipe')
 
     def validate(self, data):
         """Проверить, что такая запись уже существует."""

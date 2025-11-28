@@ -3,6 +3,7 @@
 from api.filters import IngredientFilter, RecipeFilter
 from api.permissions import IsAuthenticatedAuthorOrReadOnly
 from api.serializers import (
+    AvatarSerializer,
     FavoriteSerializer,
     ShoppingCartSerializer,
     TagSerializer,
@@ -11,6 +12,7 @@ from api.serializers import (
     UserGetSerializer,
     UserPostSerializer,
     SubscriptionPostSerializer,
+    SubscriptionSerializer,
 )
 from api.services import Pagination, ShortLink
 
@@ -143,7 +145,7 @@ class RecipeViewSet(viewsets.ModelViewSet):
     def _add_or_remove_recipe(self, request, model, serializer_class):
         """Общий обработчик добавления и удаления рецепта."""
         recipe = self.get_object()
-    
+
         if request.method == 'POST':
             # Передаём и user, и recipe в данные сериализатора
             serializer = serializer_class(
@@ -154,7 +156,7 @@ class RecipeViewSet(viewsets.ModelViewSet):
             # Ничего лишнего не передаём в save — это устраивает ревьюера
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
-    
+
         serializer_class.validate_delete(request.user, recipe)
         model.objects.filter(user=request.user, recipe=recipe).delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
