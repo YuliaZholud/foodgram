@@ -10,6 +10,7 @@ from api.serializers import (
     TagSerializer,
     IngredientSerializer,
     RecipePostSerializer,
+    AvatarSerializer,
     UserGetSerializer,
     UserPostSerializer,
 )
