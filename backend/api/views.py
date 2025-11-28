@@ -195,31 +195,23 @@ class UserViewSet(DjoserUserViewSet):
         return super().get_serializer_class()
 
     @action(
-        methods=('POST', 'DELETE'),
-        url_path='subscribe',
+        methods=('GET',),
+        url_path='subscriptions',
         permission_classes=(IsAuthenticated,),
-        detail=True,
+        detail=False,
     )
-    def subscribe(self, request, id=None):
-        """Подписаться или отписаться."""
+    def subscriptions(self, request):
+        """Вернуть список подписок пользователя."""
         user = request.user
-        author = self.get_object()
+        queryset = user.follows.select_related('author')
+        authors = [follow.author for follow in queryset]
 
-        if request.method == 'POST':
-            serializer = SubscriptionPostSerializer(
-                data={},
-                context={'request': request, 'author': author},
-            )
-            serializer.is_valid(raise_exception=True)
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-
-        SubscriptionPostSerializer.validate_delete(
-            user=user,
-            author=author,
+        serializer = SubscriptionGetSerializer(
+            authors,
+            many=True,
+            context={'request': request},
         )
-        author.followers.filter(user=user).delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class TagViewSet(viewsets.ReadOnlyModelViewSet):
