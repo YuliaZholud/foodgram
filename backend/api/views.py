@@ -6,6 +6,7 @@ from api.serializers import (
     FavoriteSerializer,
     ShoppingCartSerializer,
     SubscriptionPostSerializer,
+    SubscriptionSerializer,  # ← ЭТОГО НЕ ХВАТАЛО
     TagSerializer,
     IngredientSerializer,
     RecipePostSerializer,
