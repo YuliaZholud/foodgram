@@ -195,23 +195,23 @@ class UserViewSet(DjoserUserViewSet):
         return super().get_serializer_class()
 
     @action(
-        methods=('GET',),
-        url_path='subscriptions',
+        methods=("GET",),
+        url_path="subscriptions",
         permission_classes=(IsAuthenticated,),
         detail=False,
     )
     def subscriptions(self, request):
-        """Вернуть список подписок пользователя."""
+        """Возвратить список авторов, на которых подписан пользователь."""
         user = request.user
-        queryset = user.follows.select_related('author')
-        authors = [follow.author for follow in queryset]
+        queryset = user.follower.select_related("author")
 
-        serializer = SubscriptionGetSerializer(
-            authors,
+        pages = self.paginate_queryset(queryset)
+        serializer = SubscriptionSerializer(
+            pages,
             many=True,
             context={'request': request},
         )
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        return self.get_paginated_response(serializer.data)
 
 
 class TagViewSet(viewsets.ReadOnlyModelViewSet):

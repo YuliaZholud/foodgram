@@ -416,40 +416,24 @@ class SubscriptionGetSerializer(serializers.ModelSerializer):
         ).data
 
 
-class SubscriptionSerializer(UserGetSerializer):
-    """Автор в списке подписок."""
+class SubscriptionSerializer(serializers.ModelSerializer):
+    """Сериализатор подписок для вывода списка."""
 
     recipes = serializers.SerializerMethodField()
-    recipes_count = serializers.IntegerField(
-        read_only=True,
-        source='recipes.count',
-    )
+    recipes_count = serializers.IntegerField(source="author.recipes.count")
 
-    class Meta(UserGetSerializer.Meta):
-        """Поля списка подписок."""
-
-        fields = UserGetSerializer.Meta.fields + (
-            'recipes',
-            'recipes_count',
-        )
+    class Meta:
+        model = Follow
+        fields = ("author", "recipes", "recipes_count")
 
     def get_recipes(self, obj):
-        """Вернуть рецепты автора."""
-        request = self.context.get('request')
-        qs = obj.recipes.all().order_by('-id')
-
-        limit = None
-        if request:
-            limit = request.query_params.get('recipes_limit')
-
+        request = self.context.get("request")
+        limit = request.query_params.get("recipes_limit")
+        recipes = obj.author.recipes.all()
         if limit:
-            try:
-                qs = qs[: int(limit)]
-            except (TypeError, ValueError):
-                pass
-
+            recipes = recipes[: int(limit)]
         return MiniRecipeSerializer(
-            qs,
+            recipes,
             many=True,
-            context={'request': request},
+            context=self.context
         ).data
