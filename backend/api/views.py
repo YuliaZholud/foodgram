@@ -196,19 +196,25 @@ class UserViewSet(DjoserUserViewSet):
         return super().get_serializer_class()
 
     @action(
-        methods=("GET",),
-        url_path="subscriptions",
+        methods=('GET',),
+        url_path='subscriptions',
         permission_classes=(IsAuthenticated,),
         detail=False,
     )
     def subscriptions(self, request):
-        """Возвратить список авторов, на которых подписан пользователь."""
+        """Список авторов, на которых подписан текущий пользователь."""
         user = request.user
-        queryset = user.follower.select_related("author")
 
-        pages = self.paginate_queryset(queryset)
+        # все объекты Follow текущего пользователя
+        follows = user.follower.select_related('author')
+
+        # достаём авторов из подписок
+        authors = [follow.author for follow in follows]
+
+        # пагинируем уже список авторов
+        page = self.paginate_queryset(authors)
         serializer = SubscriptionSerializer(
-            pages,
+            page,
             many=True,
             context={'request': request},
         )
