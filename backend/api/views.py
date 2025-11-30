@@ -37,6 +37,8 @@ from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
+from users.models import Follow
+
 User = get_user_model()
 
 
@@ -133,19 +135,20 @@ class RecipeViewSet(viewsets.ModelViewSet):
         )
 
     def _add_or_remove(self, request, model, serializer_class):
-        """Общий метод добавления/удаления."""
+        """Общий метод добавления или удаления (избранное / корзина)."""
         recipe = self.get_object()
 
+        serializer = serializer_class(
+            data={},
+            context={'request': request, 'recipe': recipe},
+        )
+        serializer.is_valid(raise_exception=True)
+
         if request.method == 'POST':
-            serializer = serializer_class(
-                data={'user': request.user.pk, 'recipe': recipe.pk},
-                context={'request': request},
-            )
-            serializer.is_valid(raise_exception=True)
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-        serializer_class.validate_delete(request.user, recipe)
+        # DELETE - запись уже провалидирована в serializer.validate()
         model.objects.filter(user=request.user, recipe=recipe).delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -169,8 +172,8 @@ class RecipeViewSet(viewsets.ModelViewSet):
         )
 
         lines = [
-            f"{item['name']} ({item['measurement_unit']}) — "
-            f"{item['total_amount']}"
+            f'{item["name"]} ({item["measurement_unit"]}) — '
+            f'{item["total_amount"]}'
             for item in items
         ]
 
@@ -203,17 +206,37 @@ class UserViewSet(DjoserUserViewSet):
 
     @action(
         detail=False,
-        methods=['get', 'put', 'patch'],
-        permission_classes=[permissions.IsAuthenticated],
+        methods=('get',),
+        permission_classes=(permissions.IsAuthenticated,),
         url_path='me',
     )
     def me(self, request, *args, **kwargs):
-        """Вернуть или обновить данные текущего пользователя."""
-        if request.method == 'GET':
-            return super().me(request, *args, **kwargs)
+        """Вернуть данные текущего пользователя."""
+        return super().me(request, *args, **kwargs)
+
+    @action(
+        detail=False,
+        methods=('put', 'delete'),
+        permission_classes=(permissions.IsAuthenticated,),
+        url_path='me/avatar',
+    )
+    def avatar(self, request, *args, **kwargs):
+        """Создать или удалить аватар текущего пользователя."""
+        user = request.user
+
+        if request.method == 'DELETE':
+            serializer = AvatarSerializer(
+                user,
+                data={'avatar': None},
+                partial=True,
+                context={'request': request},
+            )
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            return Response(status=status.HTTP_204_NO_CONTENT)
 
         serializer = AvatarSerializer(
-            request.user,
+            user,
             data=request.data,
             partial=True,
             context={'request': request},
@@ -233,7 +256,6 @@ class UserViewSet(DjoserUserViewSet):
         author = self.get_object()
 
         if request.method == 'POST':
-            # тело запроса пустое, всё берём из контекста
             serializer = SubscriptionPostSerializer(
                 data={},
                 context={'request': request, 'author': author},
@@ -247,18 +269,17 @@ class UserViewSet(DjoserUserViewSet):
             )
             return Response(output.data, status=status.HTTP_201_CREATED)
 
-        # DELETE — валидация удаления в сериализаторе
-        SubscriptionPostSerializer.validate_delete(
-            user=request.user,
-            author=author,
-        )
-        author.followers.filter(user=request.user).delete()
+        SubscriptionPostSerializer(
+            data={},
+            context={'request': request, 'author': author},
+        ).is_valid(raise_exception=True)
+        Follow.objects.filter(user=request.user, author=author).delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(
         detail=False,
-        methods=['get'],
-        permission_classes=[permissions.IsAuthenticated],
+        methods=('get',),
+        permission_classes=(permissions.IsAuthenticated,),
         url_path='subscriptions',
     )
     def subscriptions(self, request):
@@ -293,6 +314,12 @@ class IngredientViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 def redirect_to_recipe_detail(request, short_link_code):
-    """Редирект по короткой ссылке."""
+    """
+    Редирект по короткой ссылке.
+
+    Делаем переход на detail-страницу рецепта из API,
+    чтобы использовать единый URL и права доступа.
+    """
     recipe = get_object_or_404(Recipe, short_link=short_link_code)
-    return redirect('api:recipe-detail', pk=recipe.id)
+    # basename у роутера: 'recipes' → имя маршрута 'recipes-detail'
+    return redirect('api:recipes-detail', pk=recipe.pk)

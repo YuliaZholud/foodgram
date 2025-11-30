@@ -74,9 +74,15 @@ class UserGetSerializer(serializers.ModelSerializer):
     def get_is_subscribed(self, author):
         """Проверить подписку."""
         request = self.context.get('request')
-        if not request:
+        if request is None:
             return False
-        return author.followers.filter(user_id=request.user.pk).exists()
+
+        user = getattr(request, 'user', None)
+        # Для анонимного пользователя всегда False
+        if user is None or not user.is_authenticated:
+            return False
+
+        return author.followers.filter(user=user).exists()
 
 
 class TagSerializer(serializers.ModelSerializer):
@@ -249,7 +255,6 @@ class RecipeGetSerializer(serializers.ModelSerializer):
 
     class Meta:
         """Поля рецепта для чтения."""
-
         model = Recipe
         fields = (
             'id',
@@ -264,23 +269,28 @@ class RecipeGetSerializer(serializers.ModelSerializer):
             'cooking_time',
         )
 
-    def _check(self, obj, model):
-        """Проверить статус рецепта."""
+    def _get_user(self):
         request = self.context.get('request')
-        if not request:
-            return False
-        return model.objects.filter(
-            recipe_id=obj.pk,
-            user_id=request.user.pk,
-        ).exists()
+        if request is None:
+            return None
+        user = getattr(request, 'user', None)
+        if user is None or not user.is_authenticated:
+            return None
+        return user
 
     def get_is_favorited(self, obj):
         """Проверить, находится ли рецепт в избранном."""
-        return self._check(obj, Favorite)
+        user = self._get_user()
+        if user is None:
+            return False
+        return obj.favorites.filter(user=user).exists()
 
     def get_is_in_shopping_cart(self, obj):
         """Проверить, находится ли рецепт в списке покупок."""
-        return self._check(obj, ShoppingCart)
+        user = self._get_user()
+        if user is None:
+            return False
+        return obj.cart_recipes.filter(user=user).exists()
 
 
 class MiniRecipeSerializer(serializers.ModelSerializer):
@@ -296,46 +306,63 @@ class MiniRecipeSerializer(serializers.ModelSerializer):
 
 
 class FavoriteSerializer(serializers.ModelSerializer):
-    """Добавление в избранное."""
+    """Добавление в избранное / корзину (базовый сериализатор)."""
 
     error_message = 'Рецепт уже в избранном.'
     not_found_message = 'Рецепт отсутствует в избранном.'
 
     class Meta:
         """Поля избранного."""
-
         model = Favorite
-        fields = ('user', 'recipe')
+        # Тело запроса пустое, всё берём из контекста.
+        fields = ()
 
-    def validate(self, data):
-        """Проверить существование записи."""
-        if Favorite.objects.filter(**data).exists():
+    def validate(self, attrs):
+        """Валидация добавления и удаления (общая для избранного/корзины)."""
+        request = self.context['request']
+        recipe = self.context['recipe']
+        model = self.Meta.model
+
+        exists = model.objects.filter(
+            user=request.user,
+            recipe=recipe,
+        ).exists()
+
+        if request.method == 'POST' and exists:
             raise serializers.ValidationError(self.error_message)
-        return data
 
-    @classmethod
-    def validate_delete(cls, user, recipe):
-        """Проверить возможность удаления из избранного."""
-        if not Favorite.objects.filter(user=user, recipe=recipe).exists():
-            raise serializers.ValidationError(cls.not_found_message)
+        if request.method == 'DELETE' and not exists:
+            raise serializers.ValidationError(self.not_found_message)
+
+        return attrs
+
+    def create(self, validated_data):
+        """Создать запись (избранное или корзина)."""
+        request = self.context['request']
+        recipe = self.context['recipe']
+        model = self.Meta.model
+        return model.objects.create(
+            user=request.user,
+            recipe=recipe,
+        )
 
     def to_representation(self, instance):
         """Вернуть мини-рецепт для ответа."""
+        request = self.context.get('request')
         return MiniRecipeSerializer(
             instance.recipe,
-            context=self.context,
+            context={'request': request},
         ).data
 
 
 class ShoppingCartSerializer(FavoriteSerializer):
-    """Добавление в корзину."""
+    """Добавление в корзину / удаление из корзины."""
 
     error_message = 'Рецепт уже в корзине.'
     not_found_message = 'Рецепта нет в корзине.'
 
     class Meta(FavoriteSerializer.Meta):
         """Поля корзины."""
-
         model = ShoppingCart
 
 
@@ -349,16 +376,26 @@ class SubscriptionPostSerializer(serializers.ModelSerializer):
         fields = ()
 
     def validate(self, attrs):
-        """Проверить возможность подписки."""
+        """Валидация создания и удаления подписки."""
         request = self.context['request']
-        author = self.context['author']
+        author = self.context.get('author')
 
-        if request.user == author:
-            raise serializers.ValidationError(
-                'Нельзя подписаться на себя.',
-            )
-        if author.followers.filter(user=request.user).exists():
-            raise serializers.ValidationError('Подписка уже существует.')
+        if author is None:
+            raise serializers.ValidationError('Автор не передан в контексте.')
+
+        exists = author.followers.filter(user=request.user).exists()
+
+        # Нельзя подписаться на себя
+        if request.method == 'POST':
+            if request.user == author:
+                raise serializers.ValidationError('Нельзя подписаться на себя.')
+            if exists:
+                raise serializers.ValidationError('Подписка уже существует.')
+
+        # Нет подписки → нечего удалять
+        if request.method == 'DELETE' and not exists:
+            raise serializers.ValidationError('Подписки не существует.')
+
         attrs['author'] = author
         return attrs
 
@@ -369,18 +406,15 @@ class SubscriptionPostSerializer(serializers.ModelSerializer):
             author=validated_data['author'],
         )
 
-    @classmethod
-    def validate_delete(cls, *, user, author):
-        """Проверить возможность удаления подписки."""
-        if not author.followers.filter(user=user).exists():
-            raise serializers.ValidationError('Подписки не существует.')
 
-
-class SubscriptionGetSerializer(serializers.ModelSerializer):
+class SubscriptionSerializer(serializers.ModelSerializer):
     """Чтение подписки."""
 
     recipes = serializers.SerializerMethodField()
-    recipes_count = serializers.IntegerField(default=0)
+    recipes_count = serializers.IntegerField(
+        source='recipes.count',
+        read_only=True,
+    )
     is_subscribed = serializers.BooleanField(default=True)
     avatar = Base64ImageField(allow_null=True, required=False)
 
@@ -401,42 +435,26 @@ class SubscriptionGetSerializer(serializers.ModelSerializer):
         )
 
     def get_recipes(self, obj):
-        """Получить рецепты автора."""
+        """Вернуть рецепты автора с учётом recipes_limit."""
         request = self.context.get('request')
-        qs = obj.recipes.all().order_by('-id')
+        recipes_qs = obj.recipes.all().order_by('-id')
 
-        limit = request.query_params.get('recipes_limit') if request else None
-        if limit and limit.isdigit():
-            qs = qs[: int(limit)]
+        recipes_limit = None
+        if request is not None:
+            recipes_limit = request.query_params.get('recipes_limit')
+
+        if recipes_limit is not None:
+            try:
+                limit = int(recipes_limit)
+                if limit > 0:
+                    recipes_qs = recipes_qs[:limit]
+            except (TypeError, ValueError):
+                # Если recipes_limit некорректен,
+                # просто отдаём все рецепты.
+                pass
 
         return MiniRecipeSerializer(
-            qs,
+            recipes_qs,
             many=True,
-            context=self.context,
+            context={'request': request},
         ).data
-
-
-def get_recipes(self, obj):
-    """Вернуть рецепты автора с учётом recipes_limit."""
-    request = self.context.get('request')
-    recipes_qs = obj.recipes.all().order_by('-id')
-
-    recipes_limit = None
-    if request is not None:
-        recipes_limit = request.query_params.get('recipes_limit')
-
-    if recipes_limit is not None:
-        try:
-            limit = int(recipes_limit)
-            if limit > 0:
-                recipes_qs = recipes_qs[:limit]
-        except (TypeError, ValueError):
-            # Если recipes_limit некорректен,
-            # просто отдаём все рецепты.
-            pass
-
-    return MiniRecipeSerializer(
-        recipes_qs,
-        many=True,
-        context={'request': request},
-    ).data
