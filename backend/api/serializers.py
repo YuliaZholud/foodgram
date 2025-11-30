@@ -388,7 +388,9 @@ class SubscriptionPostSerializer(serializers.ModelSerializer):
         # Нельзя подписаться на себя
         if request.method == 'POST':
             if request.user == author:
-                raise serializers.ValidationError('Нельзя подписаться на себя.')
+                raise serializers.ValidationError(
+                    'Нельзя подписаться на себя.',
+                )
             if exists:
                 raise serializers.ValidationError('Подписка уже существует.')
 
